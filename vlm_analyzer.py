@@ -16,7 +16,7 @@ DESCRIPTION_DIR = "output_description/descriptions"
 INPUT_VIDEO_DIR = "input_videos"
 
 OLLAMA_HOST = "http://localhost:11434"
-MODEL_NAME = "llava"
+MODEL_NAME = "moondream"
 
 os.makedirs(FRAME_DIR, exist_ok=True)
 os.makedirs(DESCRIPTION_DIR, exist_ok=True)
@@ -93,17 +93,17 @@ def extract_keyframes(video_path):
 # STORE DESCRIPTION
 # ---------------------------
 def store_description(video_name, frame_index, description):
-    create_database()
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
     cur.execute("""
-        INSERT OR IGNORE INTO descriptions (video_name, frame_index, description)
+        INSERT OR REPLACE INTO descriptions (video_name, frame_index, description)
         VALUES (?, ?, ?)
     """, (video_name, frame_index, description))
 
     conn.commit()
     conn.close()
+
 
 # ---------------------------
 # VLM DESCRIPTION GENERATOR
@@ -122,15 +122,18 @@ def generate_description(frame_path, prompt=None):
         "prompt": prompt,
         "images": [base64_image],
         "stream": False,
+        "keep_alive": "5m",
         "options": {
             "temperature": 0.1,
             "top_p": 0.9,
-            "top_k": 40
+            "top_k": 40,
+            
         }
     }
 
     try:
-        response = requests.post(f"{OLLAMA_HOST}/api/generate", json=payload, timeout=120)
+        response = requests.post(f"{OLLAMA_HOST}/api/generate", json=payload, timeout=600)
+
         if response.status_code == 200:
             result = response.json()
             desc = result.get("response", "No description generated")
