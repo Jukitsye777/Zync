@@ -56,7 +56,8 @@ def create_database():
 # EXTRACT KEYFRAMES
 # ---------------------------
 def extract_keyframes(video_path):
-    video_name = os.path.basename(video_path)
+    video_name = Path(video_path).stem
+
     cap = cv2.VideoCapture(video_path)
     frame_count = 0
     saved = 0
@@ -74,11 +75,14 @@ def extract_keyframes(video_path):
         if frame_count % 30 == 0:
             frame_file = f"{FRAME_DIR}/{video_name}_frame_{frame_count}.jpg"
             cv2.imwrite(frame_file, frame)
+            
+            unique_video_name = f"{Path(video_name).stem}_{frame_count}"
 
             cur.execute("""
                 INSERT OR IGNORE INTO keyframes (video_name, frame_index, frame_path)
                 VALUES (?, ?, ?)
-            """, (video_name, frame_count, frame_file))
+                """, (unique_video_name, frame_count, frame_file))
+
             saved += 1
 
         frame_count += 1
@@ -93,16 +97,21 @@ def extract_keyframes(video_path):
 # STORE DESCRIPTION
 # ---------------------------
 def store_description(video_name, frame_index, description):
+    # Create unique video name like classroom_0, classroom_30 etc.
+    unique_video_name = f"{Path(video_name).stem}_{frame_index}"
+
+    create_database()
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
     cur.execute("""
-        INSERT OR REPLACE INTO descriptions (video_name, frame_index, description)
+        INSERT OR IGNORE INTO descriptions (video_name, frame_index, description)
         VALUES (?, ?, ?)
-    """, (video_name, frame_index, description))
+    """, (unique_video_name, frame_index, description))
 
     conn.commit()
     conn.close()
+
 
 
 # ---------------------------
