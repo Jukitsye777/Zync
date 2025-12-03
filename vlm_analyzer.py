@@ -27,26 +27,28 @@ os.makedirs(DESCRIPTION_DIR, exist_ok=True)
 def create_database():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-
     cur.execute("""
     CREATE TABLE IF NOT EXISTS keyframes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        video_name TEXT NOT NULL,
-        frame_index INTEGER NOT NULL,
-        frame_path TEXT,
-        UNIQUE(video_name, frame_index)
-    );
-    """)
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    video_name TEXT NOT NULL,
+    frame_index INTEGER NOT NULL,
+    frame_path TEXT,
+    clip_id INTEGER,
+    UNIQUE(video_name, frame_index)
+);
+""")
 
     cur.execute("""
-    CREATE TABLE IF NOT EXISTS descriptions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        video_name TEXT NOT NULL,
-        frame_index INTEGER NOT NULL,
-        description TEXT,
-        UNIQUE(video_name, frame_index)
-    );
-    """)
+CREATE TABLE IF NOT EXISTS descriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    video_name TEXT NOT NULL,
+    frame_index INTEGER NOT NULL,
+    clip_id INTEGER,
+    description TEXT,
+    UNIQUE(video_name, frame_index)
+);
+""")
+  
 
     conn.commit()
     conn.close()
@@ -57,12 +59,12 @@ def create_database():
 # ---------------------------
 def extract_keyframes(video_path):
     video_name = Path(video_path).stem
+    frames_per_clip = 5  # change number of frames per subclip grouping if needed
 
+    saved = 0
     cap = cv2.VideoCapture(video_path)
     frame_count = 0
-    saved = 0
 
-    create_database()
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
@@ -73,15 +75,16 @@ def extract_keyframes(video_path):
 
         # Save every 30th frame
         if frame_count % 30 == 0:
-            frame_file = f"{FRAME_DIR}/{video_name}_frame_{frame_count}.jpg"
+            clip_id = saved // frames_per_clip + 1
+            unique_video_name = f"{video_name}_subclip_{clip_id}"
+
+            frame_file = f"{FRAME_DIR}/{unique_video_name}_frame_{frame_count}.jpg"
             cv2.imwrite(frame_file, frame)
-            
-            unique_video_name = f"{Path(video_name).stem}_{frame_count}"
 
             cur.execute("""
-                INSERT OR IGNORE INTO keyframes (video_name, frame_index, frame_path)
-                VALUES (?, ?, ?)
-                """, (unique_video_name, frame_count, frame_file))
+                INSERT OR IGNORE INTO keyframes (video_name, frame_index, frame_path, clip_id)
+                VALUES (?, ?, ?, ?)
+            """, (unique_video_name, frame_count, frame_file, clip_id))
 
             saved += 1
 
@@ -90,27 +93,25 @@ def extract_keyframes(video_path):
     conn.commit()
     conn.close()
     cap.release()
+
     print(f"🎞 Extracted {saved} keyframes for {video_name}")
-    return True
+
 
 # ---------------------------
 # STORE DESCRIPTION
 # ---------------------------
-def store_description(video_name, frame_index, description):
-    # Create unique video name like classroom_0, classroom_30 etc.
-    unique_video_name = f"{Path(video_name).stem}_{frame_index}"
-
-    create_database()
+def store_description(video_name, frame_index, description, clip_id):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
     cur.execute("""
-        INSERT OR IGNORE INTO descriptions (video_name, frame_index, description)
-        VALUES (?, ?, ?)
-    """, (unique_video_name, frame_index, description))
+        INSERT OR IGNORE INTO descriptions (video_name, frame_index, clip_id, description)
+        VALUES (?, ?, ?, ?)
+    """, (video_name, frame_index, clip_id, description))
 
     conn.commit()
     conn.close()
+
 
 
 
@@ -164,20 +165,26 @@ def generate_description(frame_path, prompt=None):
 # ---------------------------
 def process_video(video_path):
     extract_keyframes(video_path)
-    video_name = os.path.basename(video_path)
+    base_name = Path(video_path).stem
 
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("SELECT frame_index, frame_path FROM keyframes WHERE video_name=?", (video_name,))
+    cur.execute("""
+        SELECT frame_index, frame_path, video_name, clip_id
+        FROM keyframes
+        WHERE video_name LIKE ?
+    """, (f"{base_name}_subclip_%",))
     frames = cur.fetchall()
     conn.close()
 
-    for frame_index, frame_path in frames:
-        print(f"🧠 Generating description for {frame_path}...")
+    for frame_index, frame_path, video_name_db, clip_id in frames:
+        print(f"🧠 Generating description for {frame_path} (clip {clip_id})...")
         desc = generate_description(frame_path)
-        store_description(video_name, frame_index, desc)
+        store_description(video_name_db, frame_index, desc, clip_id)
 
     print("✨ All descriptions stored!")
+
+
 
 # ---------------------------
 # MAIN
