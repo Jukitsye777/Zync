@@ -1,0 +1,20 @@
+# Python env
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Database / outputs / heavy assets
+output_description/
+*.db
+*.db.*
+*.sqlite
+output_description.zip
+
+# IDE / OS
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Huggingface cache (optional)
+.cache/
