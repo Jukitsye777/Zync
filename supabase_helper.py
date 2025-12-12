@@ -27,17 +27,43 @@ def insert_keyframe(video_name: str, frame_index: int, frame_path: str, clip_id:
             print(f"⚠ Keyframe already exists → {video_name} frame {frame_index}")
             return
 
+        # ---------------------------
+        # UPLOAD FRAME TO SUPABASE STORAGE
+        # ---------------------------
+        bucket_name = "keyframe"  # keep singular
+
+        # extract just the filename
+        filename = os.path.basename(frame_path)
+        storage_path = f"{video_name}/{filename}"
+
+        # upload
+        with open(frame_path, "rb") as f:
+            supabase.storage.from_(bucket_name).upload(
+                storage_path,
+                f,
+                file_options={"content-type": "image/jpeg"}
+            )
+
+        # get public URL
+        public_url = supabase.storage.from_(bucket_name).get_public_url(storage_path)
+
+        # ---------------------------
+        # INSERT INTO DATABASE
+        # ---------------------------
         data = {
             "video_name": video_name,
             "frame_index": frame_index,
-            "frame_path": frame_path,
+            "frame_path": public_url,   # store the public URL
             "clip_id": clip_id
         }
 
         supabase.table("keyframes").insert(data).execute()
 
+        print(f"✅ Uploaded + saved keyframe → {video_name} frame {frame_index}")
+
     except Exception as e:
         print(f"❌ Failed inserting keyframe {video_name} frame {frame_index}: {e}")
+
 
 
 # ---------------------------

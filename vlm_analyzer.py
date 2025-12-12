@@ -5,6 +5,18 @@ import base64
 import requests
 
 from supabase_helper import insert_keyframe, insert_description, fetch_keyframes
+import requests
+import tempfile
+
+def download_image_to_temp(url: str):
+    resp = requests.get(url)
+    if resp.status_code != 200:
+        raise Exception(f"Failed to download image from Supabase: {url}")
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
+    tmp.write(resp.content)
+    tmp.close()
+    return tmp.name
 
 # ---------------------------
 # CONFIG
@@ -25,33 +37,43 @@ MODEL_NAME = "moondream"
 # ---------------------------
 import time
 def generate_description(frame_path):
-    if not os.path.exists(frame_path):
-        print(f"❌ Missing frame: {frame_path}")
-        return None
-
-    # Read and encode image
-    with open(frame_path, "rb") as f:
-        img_bytes = f.read()
-    img_b64 = base64.b64encode(img_bytes).decode("utf-8")
-
-    payload = {
-        "model": MODEL_NAME,
-        "prompt": "Describe this image in detail.",
-        "images": [img_b64],
-        "stream": False
-    }
-
     try:
+        # Case 1: frame_path is a Supabase public URL → download it
+        if frame_path.startswith("http://") or frame_path.startswith("https://"):
+            resp = requests.get(frame_path)
+            if resp.status_code != 200:
+                print(f"❌ Cannot download frame → {frame_path}")
+                return None
+            img_bytes = resp.content
+
+        # Case 2: local file path (fallback)
+        else:
+            if not os.path.exists(frame_path):
+                print(f"❌ Missing frame: {frame_path}")
+                return None
+            with open(frame_path, "rb") as f:
+                img_bytes = f.read()
+
+        # Encode image to base64
+        img_b64 = base64.b64encode(img_bytes).decode("utf-8")
+
+        payload = {
+            "model": MODEL_NAME,
+            "prompt": "Describe this image in detail.",
+            "images": [img_b64],
+            "stream": False
+        }
+
         response = requests.post(f"{OLLAMA_HOST}/api/generate", json=payload)
         response.raise_for_status()
         result = response.json()
 
-        # Ollama returns the text inside "response"
         return result.get("response", "").strip()
 
     except Exception as e:
         print(f"❌ Ollama error for {frame_path}: {e}")
         return None
+
 
 
 
@@ -108,12 +130,19 @@ def process_video(video_path):
         frame_path = frame["frame_path"]
         clip_id = frame["clip_id"]
         vid_name = frame["video_name"]
+        if frame_path.startswith("http://") or frame_path.startswith("https://"):
+            try:
+                local_frame = download_image_to_temp(frame_path)
+            except Exception as e:
+                print(f"⚠ Could not download keyframe → {frame_path} | {e}")
+                continue
+        else:
+            if not os.path.exists(frame_path):
+                print(f"⚠ Missing local frame file → {frame_path}")
+                continue
+            local_frame = frame_path
 
-        if not os.path.exists(frame_path):
-            print(f"⚠ Missing frame file → {frame_path}")
-            continue
-
-        description = generate_description(frame_path)
+        description = generate_description(local_frame)
         if not description:
             print(f"⚠ No description for frame {frame_index}")
             continue
