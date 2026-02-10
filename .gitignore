@@ -3,7 +3,7 @@
 venv/
 __pycache__/
 *.pyc
-
+.env
 # Database / outputs / heavy assets
 output_description/
 *.db
@@ -15,6 +15,6 @@ output_description.zip
 .vscode/
 .DS_Store
 Thumbs.db
-
+selected_clips.json
 # Huggingface cache (optional)
 .cache/
