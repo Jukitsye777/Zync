@@ -1,44 +1,90 @@
 import { useState } from "react";
-import { 
-  Plus, 
+
+import {
+  Plus,
   Download,
   Layers,
-  Zap
+  Zap,
 } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { VideoUploader, type VideoFile } from "@/components/VideoUpload";
 import { TrimControls } from "@/components/TrimControls";
 import { Timeline, type TimelineClip } from "@/components/Timeline";
 import { VideoPreview } from "@/components/VideoPreview";
-import { AIToolsPanel } from "@/components/AIToolsPanel";
 import { useToast } from "@/hooks/use-toast";
+
+type AIScene = {
+  id: string;
+  label: string;
+  start: number;
+  end: number;
+};
 
 export default function Index() {
   const [videos, setVideos] = useState<VideoFile[]>([]);
   const [timelineClips, setTimelineClips] = useState<TimelineClip[]>([]);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
-  const [trimValues, setTrimValues] = useState<{ start: number; end: number }>({
-    start: 0,
-    end: 10,
-  });
+
+  const [trimValues, setTrimValues] = useState({ start: 0, end: 10 });
   const [assembledVideoUrl, setAssembledVideoUrl] = useState<string | null>(null);
+
+  /** AI-related state */
+  const [prompt, setPrompt] = useState("");
+  const [aiStatus, setAiStatus] =
+    useState<"idle" | "analyzing" | "matching" | "done">("idle");
+  const [aiScenes, setAiScenes] = useState<AIScene[]>([]);
+
   const { toast } = useToast();
 
-  // Get currently selected video for preview
-  const selectedVideo = videos.find((v) => v.id === selectedVideoId);
-  const selectedClip = timelineClips.find((c) => c.id === selectedClipId);
+  const selectedVideo = videos.find(v => v.id === selectedVideoId);
+  const selectedClip = timelineClips.find(c => c.id === selectedClipId);
+  // ADD near top
+  const MUSIC_OPTIONS = ["None", "Lo-fi", "Cinematic", "Upbeat"];
+  const FILTERS = ["None", "Warm", "Cinematic", "Black & White"];
+  const [music, setMusic] = useState("None");
+  const [filter, setFilter] = useState("None");
+  const [speed, setSpeed] = useState(1);
+  const [overlayText, setOverlayText] = useState("");
 
-  // Add video to timeline
-  const handleAddToTimeline = () => {
-    if (!selectedVideo) {
+
+
+  /* ---------------- AI PIPELINE (MOCK) ---------------- */
+
+  const handleRunAI = async () => {
+    if (!prompt || videos.length === 0) {
       toast({
-        title: "Select a Video",
-        description: "Click on an uploaded video to select it first.",
+        title: "Missing input",
+        description: "Upload a video and enter a prompt.",
         variant: "destructive",
       });
       return;
     }
+
+    setAiStatus("analyzing");
+    await new Promise(r => setTimeout(r, 1200));
+
+    setAiStatus("matching");
+    await new Promise(r => setTimeout(r, 1200));
+
+    setAiScenes([
+      { id: "s1", label: "Scene 1", start: 0, end: 8 },
+      { id: "s2", label: "Scene 2", start: 14, end: 26 },
+    ]);
+
+    setAiStatus("done");
+
+    toast({
+      title: "AI Processing Complete",
+      description: "Relevant scenes detected.",
+    });
+  };
+
+  /* ---------------- TIMELINE ---------------- */
+
+  const handleAddToTimeline = () => {
+    if (!selectedVideo) return;
 
     const newClip: TimelineClip = {
       id: crypto.randomUUID(),
@@ -50,227 +96,225 @@ export default function Index() {
     };
 
     setTimelineClips([...timelineClips, newClip]);
-    toast({
-      title: "Clip Added",
-      description: `"${selectedVideo.name}" added to timeline.`,
-    });
   };
 
-  // Remove clip from timeline
-  const handleRemoveClip = (id: string) => {
-    setTimelineClips(timelineClips.filter((c) => c.id !== id));
-    if (selectedClipId === id) {
-      setSelectedClipId(null);
-    }
+  const handleAddAIScene = (scene: AIScene) => {
+    if (!selectedVideo) return;
+
+    const newClip: TimelineClip = {
+      id: crypto.randomUUID(),
+      name: scene.label,
+      duration: scene.end - scene.start,
+      trimStart: scene.start,
+      trimEnd: scene.end,
+      videoUrl: selectedVideo.url,
+    };
+
+    setTimelineClips(prev => [...prev, newClip]);
   };
 
-  /**
-   * Assembles trimmed clips into one video
-   * TODO: Replace with actual video assembly logic (FFmpeg.wasm or backend)
-   */
   const handleAssembleVideo = async () => {
-    if (timelineClips.length === 0) {
-      toast({
-        title: "No Clips",
-        description: "Add clips to the timeline first.",
-        variant: "destructive",
-      });
-      return;
-    }
+    if (timelineClips.length === 0) return;
 
-    toast({
-      title: "Assembling Video...",
-      description: "This may take a moment. (Placeholder)",
-    });
-
-    // Placeholder: In real implementation, use FFmpeg.wasm or send to backend
-    // For now, just show the first clip as "assembled" output
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    
+    await new Promise(r => setTimeout(r, 1200));
     setAssembledVideoUrl(timelineClips[0].videoUrl);
-    
-    toast({
-      title: "Video Assembled",
-      description: "Your video is ready for preview. (Placeholder)",
-    });
   };
 
-  /**
-   * Exports the final assembled video
-   * TODO: Implement actual video export/download
-   */
   const handleExport = () => {
-    if (!assembledVideoUrl) {
-      toast({
-        title: "Assemble First",
-        description: "Assemble your clips before exporting.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Placeholder: Trigger download
-    const link = document.createElement("a");
-    link.href = assembledVideoUrl;
-    link.download = "zync-export.mp4";
-    link.click();
-
-    toast({
-      title: "Export Started",
-      description: "Your video is being downloaded.",
-    });
+    if (!assembledVideoUrl) return;
+    const a = document.createElement("a");
+    a.href = assembledVideoUrl;
+    a.download = "zync-output.mp4";
+    a.click();
   };
 
-  // When a video thumbnail is clicked
-  const handleVideoSelect = (id: string) => {
-    setSelectedVideoId(id);
-    const video = videos.find((v) => v.id === id);
-    if (video) {
-      setTrimValues({ start: 0, end: video.duration || 10 });
-    }
-  };
+  /* ---------------- UI ---------------- */
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <header className="h-16 border-b border-border flex items-center justify-between px-6 bg-card/50 backdrop-blur-sm sticky top-0 z-50">
+    <div className="min-h-screen flex flex-col">
+      {/* HEADER */}
+      <header className="h-16 border-b flex justify-between items-center px-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-primary/50 flex items-center justify-center shadow-lg glow-primary">
-            <Zap className="w-6 h-6 text-primary-foreground" />
-          </div>
+          <Zap />
           <div>
-            <h1 className="text-xl font-bold gradient-text">ZYNC</h1>
-            <p className="text-xs text-muted-foreground">AI Video Editor</p>
+            <h1 className="font-bold">ZYNC</h1>
+            <p className="text-xs">AI Video Editor</p>
           </div>
         </div>
-
-        <div className="flex items-center gap-3">
+        <div className="flex gap-2">
           <Button
-            variant="glow"
             onClick={handleAssembleVideo}
             disabled={timelineClips.length === 0}
           >
-            <Layers className="w-4 h-4" />
-            Assemble
+            <Layers className="w-4 h-4" /> Assemble
           </Button>
           <Button
             variant="outline"
             onClick={handleExport}
             disabled={!assembledVideoUrl}
           >
-            <Download className="w-4 h-4" />
-            Export
+            <Download className="w-4 h-4" /> Export
           </Button>
         </div>
       </header>
 
-      {/* Main content - 3 column layout */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left column - Upload & AI Tools */}
-        <aside className="w-80 border-r border-border flex flex-col bg-card/30">
-          <div className="flex-1 overflow-y-auto p-4 space-y-6">
-            {/* Upload section */}
-            <section>
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                Upload
-              </h2>
-              <VideoUploader
-                videos={videos}
-                onVideosChange={(newVideos: VideoFile[]) => {
-                  setVideos(newVideos);
-                  // Auto-select first video if none selected
-                  if (!selectedVideoId && newVideos.length > 0) {
-                    handleVideoSelect(newVideos[0].id);
-                  }
-                }}
-              />
-              
-              {/* Click to select hint */}
-              {videos.length > 0 && (
-                <div className="mt-3 space-y-2">
-                  <div className="flex flex-wrap gap-1">
-                    {videos.map((v) => (
-                      <button
-                        key={v.id}
-                        onClick={() => handleVideoSelect(v.id)}
-                        className={`px-2 py-1 text-xs rounded transition-all ${
-                          selectedVideoId === v.id
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground hover:bg-muted/80"
-                        }`}
-                      >
-                        {v.name.slice(0, 10)}...
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </section>
+      <div className="flex flex-1">
+        {/* LEFT PANEL */}
+        <aside className="w-80 border-r p-4 space-y-6">
+          <VideoUploader
+            videos={videos}
+            onVideosChange={(v) => {
+              setVideos(v);
+              if (!selectedVideoId && v.length) setSelectedVideoId(v[0].id);
+            }}
+          />
 
-            {/* Trim controls */}
-            {selectedVideo && (
-              <section className="animate-slide-up">
-                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                  Trim
-                </h2>
-                <TrimControls
-                  duration={selectedVideo.duration || 10}
-                  trimStart={trimValues.start}
-                  trimEnd={trimValues.end}
-                  onTrimChange={(start, end) => setTrimValues({ start, end })}
-                />
-                <Button
-                  variant="glow"
-                  className="w-full mt-3"
-                  onClick={handleAddToTimeline}
-                >
-                  <Plus className="w-4 h-4" />
-                  Add to Timeline
-                </Button>
-              </section>
+          {selectedVideo && (
+            <>
+              <TrimControls
+                duration={selectedVideo.duration || 10}
+                trimStart={trimValues.start}
+                trimEnd={trimValues.end}
+                onTrimChange={(s, e) => setTrimValues({ start: s, end: e })}
+              />
+              <Button onClick={handleAddToTimeline}>
+                <Plus className="w-4 h-4" /> Add to Timeline
+              </Button>
+            </>
+          )}
+
+          {/* AI PANEL */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold">AI Prompt</h3>
+            <textarea
+              value={prompt}
+              onChange={e => setPrompt(e.target.value)}
+              placeholder="e.g. Extract classroom scenes"
+              className="w-full border rounded p-2 text-sm"
+            />
+
+            <Button
+              className="w-full"
+              onClick={handleRunAI}
+              disabled={!videos.length || !prompt || aiStatus !== "idle"}
+            >
+              {aiStatus === "idle" ? "Run AI" : "Processing..."}
+            </Button>
+
+            {aiStatus !== "idle" && (
+              <p className="text-xs">
+                {aiStatus === "analyzing" && "Analyzing video…"}
+                {aiStatus === "matching" && "Matching prompt…"}
+                {aiStatus === "done" && "AI results ready"}
+              </p>
             )}
 
-            {/* AI Tools */}
-            <section>
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                AI Features
-              </h2>
-              <AIToolsPanel hasVideo={videos.length > 0} />
-            </section>
+            {aiScenes.map(scene => (
+              <div
+                key={scene.id}
+                className="border rounded p-2 flex justify-between text-sm"
+              >
+                <span>{scene.label}</span>
+                <Button
+                  size="sm"
+                  onClick={() => handleAddAIScene(scene)}
+                >
+                  Add
+                </Button>
+              </div>
+            ))}
           </div>
         </aside>
 
-        {/* Center column - Timeline */}
-        <main className="flex-1 flex flex-col bg-surface/30">
+        {/* CENTER */}
+        <main className="flex-1">
           <Timeline
             clips={timelineClips}
             selectedClipId={selectedClipId}
             onSelectClip={setSelectedClipId}
-            onRemoveClip={handleRemoveClip}
+            onRemoveClip={(id) =>
+              setTimelineClips(timelineClips.filter(c => c.id !== id))
+            }
             onReorderClips={setTimelineClips}
           />
         </main>
 
-        {/* Right column - Preview */}
-        <aside className="w-96 border-l border-border flex flex-col bg-card/30">
-          {/* Source preview */}
-          <div className="flex-1 border-b border-border">
-            <VideoPreview
-              videoUrl={selectedVideo?.url || selectedClip?.videoUrl || null}
-              trimStart={selectedClip?.trimStart || trimValues.start}
-              trimEnd={selectedClip?.trimEnd || trimValues.end}
-              title="Source Preview"
-            />
-          </div>
+        {/* RIGHT */}
+        <aside className="w-96 border-l flex flex-col p-4 gap-4">
 
-          {/* Output preview */}
-          <div className="flex-1">
-            <VideoPreview
-              videoUrl={assembledVideoUrl}
-              title="Output Preview"
-            />
-          </div>
-        </aside>
+  <VideoPreview
+    title="Source Preview"
+    videoUrl={selectedVideo?.url || selectedClip?.videoUrl || null}
+    trimStart={selectedClip?.trimStart}
+    trimEnd={selectedClip?.trimEnd}
+  />
+
+  <VideoPreview
+    title="Output Preview"
+    videoUrl={assembledVideoUrl}
+  />
+
+  {/* POST PRODUCTION */}
+  <div className="border-t pt-4 space-y-4">
+    <h3 className="text-sm font-semibold">Post-Production</h3>
+
+    {/* MUSIC */}
+    <div>
+      <label className="text-xs font-medium">Background Music</label>
+      <select
+        value={music}
+        onChange={e => setMusic(e.target.value)}
+        className="w-full border rounded p-2 text-sm"
+      >
+        {MUSIC_OPTIONS.map(m => (
+          <option key={m}>{m}</option>
+        ))}
+      </select>
+    </div>
+
+    {/* FILTER */}
+    <div>
+      <label className="text-xs font-medium">Filter</label>
+      <select
+        value={filter}
+        onChange={e => setFilter(e.target.value)}
+        className="w-full border rounded p-2 text-sm"
+      >
+        {FILTERS.map(f => (
+          <option key={f}>{f}</option>
+        ))}
+      </select>
+    </div>
+
+    {/* SPEED */}
+    <div>
+      <label className="text-xs font-medium">Playback Speed</label>
+      <input
+        type="range"
+        min="0.5"
+        max="2"
+        step="0.25"
+        value={speed}
+        onChange={e => setSpeed(Number(e.target.value))}
+        className="w-full"
+      />
+      <p className="text-xs">{speed}x</p>
+    </div>
+
+    {/* TEXT OVERLAY */}
+    <div>
+      <label className="text-xs font-medium">Text Overlay</label>
+      <input
+        type="text"
+        value={overlayText}
+        onChange={e => setOverlayText(e.target.value)}
+        placeholder="Enter caption text"
+        className="w-full border rounded p-2 text-sm"
+      />
+    </div>
+  </div>
+</aside>
+
       </div>
     </div>
   );

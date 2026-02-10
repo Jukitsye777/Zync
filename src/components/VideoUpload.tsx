@@ -2,11 +2,13 @@ import { useCallback, useState } from "react";
 import { Upload, Film, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
+
+/* ---------------- TYPES ---------------- */
 
 interface VideoFile {
-  id: string;
-  file: File;
-  url: string;
+  id: string;        // videos.id from DB
+  url: string;       // public_url from Supabase
   name: string;
   duration: number;
 }
@@ -16,49 +18,95 @@ interface VideoUploaderProps {
   videos: VideoFile[];
 }
 
+/* ---------------- COMPONENT ---------------- */
+
 export function VideoUploader({ onVideosChange, videos }: VideoUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+
+  /* ---------------- UPLOAD LOGIC ---------------- */
+
+  const processFiles = async (files: File[]) => {
+    setIsUploading(true);
+    const uploadedVideos: VideoFile[] = [];
+
+    for (const file of files) {
+      try {
+        const ext = file.name.split(".").pop();
+        const fileName = `${crypto.randomUUID()}.${ext}`;
+        const filePath = `inputs/${fileName}`;
+
+        // 1️⃣ Upload to Supabase Storage
+        const { error: uploadError } = await supabase.storage
+          .from("videos")
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        // 2️⃣ Get public URL
+        const { data: urlData } = supabase.storage
+          .from("videos")
+          .getPublicUrl(filePath);
+
+        // 3️⃣ Insert into videos table
+        const { data: videoRow, error: dbError } = await supabase
+          .from("videos")
+          .insert({
+            video_name: file.name,
+            storage_path: filePath,
+            public_url: urlData.publicUrl,
+          })
+          .select()
+          .single();
+
+        if (dbError) throw dbError;
+
+        uploadedVideos.push({
+          id: videoRow.id,
+          name: videoRow.video_name,
+          url: videoRow.public_url,
+          duration: 0,
+        });
+      } catch (err) {
+        console.error("Video upload failed:", err);
+      }
+    }
+
+    onVideosChange([...videos, ...uploadedVideos]);
+    setIsUploading(false);
+  };
+
+  /* ---------------- HANDLERS ---------------- */
 
   const handleDrop = useCallback(
-    (e: React.DragEvent) => {
+    async (e: React.DragEvent) => {
       e.preventDefault();
       setIsDragging(false);
 
       const files = Array.from(e.dataTransfer.files).filter(
-        (file) => file.type === "video/mp4" || file.type === "video/quicktime"
+        (file) =>
+          file.type === "video/mp4" || file.type === "video/quicktime"
       );
 
-      processFiles(files);
+      await processFiles(files);
     },
-    [videos, onVideosChange]
+    [videos]
   );
 
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileInput = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     if (e.target.files) {
       const files = Array.from(e.target.files);
-      processFiles(files);
+      await processFiles(files);
     }
-  };
-
-  const processFiles = (files: File[]) => {
-    const newVideos: VideoFile[] = files.map((file) => ({
-      id: crypto.randomUUID(),
-      file,
-      url: URL.createObjectURL(file),
-      name: file.name,
-      duration: 0, // Will be updated when video loads
-    }));
-
-    onVideosChange([...videos, ...newVideos]);
   };
 
   const removeVideo = (id: string) => {
-    const video = videos.find((v) => v.id === id);
-    if (video) {
-      URL.revokeObjectURL(video.url);
-    }
     onVideosChange(videos.filter((v) => v.id !== id));
   };
+
+  /* ---------------- UI ---------------- */
 
   return (
     <div className="space-y-4">
@@ -84,6 +132,7 @@ export function VideoUploader({ onVideosChange, videos }: VideoUploaderProps) {
           onChange={handleFileInput}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         />
+
         <div className="flex flex-col items-center gap-3">
           <div
             className={cn(
@@ -98,9 +147,14 @@ export function VideoUploader({ onVideosChange, videos }: VideoUploaderProps) {
               )}
             />
           </div>
+
           <div>
-            <p className="font-medium text-foreground">Drop videos here</p>
-            <p className="text-sm text-muted-foreground">MP4 or MOV files</p>
+            <p className="font-medium text-foreground">
+              {isUploading ? "Uploading..." : "Drop videos here"}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              MP4 or MOV files
+            </p>
           </div>
         </div>
       </div>
@@ -111,6 +165,7 @@ export function VideoUploader({ onVideosChange, videos }: VideoUploaderProps) {
           <p className="text-sm text-muted-foreground font-medium">
             Uploaded ({videos.length})
           </p>
+
           <div className="grid grid-cols-2 gap-2">
             {videos.map((video) => (
               <div
@@ -124,18 +179,25 @@ export function VideoUploader({ onVideosChange, videos }: VideoUploaderProps) {
                   onLoadedMetadata={(e) => {
                     const target = e.target as HTMLVideoElement;
                     const updated = videos.map((v) =>
-                      v.id === video.id ? { ...v, duration: target.duration } : v
+                      v.id === video.id
+                        ? { ...v, duration: target.duration }
+                        : v
                     );
                     onVideosChange(updated);
                   }}
                 />
+
                 <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent" />
+
                 <div className="absolute bottom-1 left-2 right-2 flex items-center justify-between">
                   <div className="flex items-center gap-1 text-xs text-foreground">
                     <Film className="w-3 h-3" />
-                    <span className="truncate max-w-[80px]">{video.name}</span>
+                    <span className="truncate max-w-[80px]">
+                      {video.name}
+                    </span>
                   </div>
                 </div>
+
                 <Button
                   variant="ghost"
                   size="icon"
