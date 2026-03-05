@@ -9,7 +9,9 @@ def main():
     parser.add_argument("--video", required=True, 
                        help="Video stem name, e.g. 'classroom'")
     parser.add_argument("--prompt", required=True, 
-                       help="User prompt to match scenes (use ';' to separate multiple clauses)")
+                       help="User prompt to match scenes (use '|' to separate multiple clauses)")
+    parser.add_argument("--exclude", default=None,
+                       help="Scenes to exclude (use '|' to separate multiple exclusions). Example: 'rainy weather | nighttime'")
     parser.add_argument("--out", default=OUTPUT_JSON,
                        help="Output JSON file path")
     parser.add_argument("--mode", default="any", 
@@ -33,9 +35,17 @@ def main():
 
     print(f"Mode: {args.mode}")
     print(f"Prompt: {args.prompt}")
+    if args.exclude:
+        print(f"Exclude: {args.exclude}")
+    
     
     # Run filtering
-    selected = sf.score_and_select(args.video, args.prompt, match_mode=args.mode)
+    selected = sf.score_and_select(
+        args.video, 
+        args.prompt, 
+        match_mode=args.mode,
+        exclude_prompt=args.exclude
+    )
     
     if not selected:
         print("No matching scenes found. Try:")
