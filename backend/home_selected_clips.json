@@ -1,0 +1,20 @@
+[
+  {
+    "video_name": "home.mp4",
+    "frame_index": 10,
+    "image_path": "https://cfxhiibvphwuycrpjssp.supabase.co/storage/v1/object/public/keyframe/home.mp4/home.mp4_frame_10.jpg",
+    "clip_id": 1,
+    "score": 0.7391623258590698,
+    "matched_clause": "curtain with floral print",
+    "clause_index": 0
+  },
+  {
+    "video_name": "home.mp4",
+    "frame_index": 30,
+    "image_path": "https://cfxhiibvphwuycrpjssp.supabase.co/storage/v1/object/public/keyframe/home.mp4/home.mp4_frame_30.jpg",
+    "clip_id": 1,
+    "score": 0.7344136834144592,
+    "matched_clause": "curtain with floral print",
+    "clause_index": 0
+  }
+]
