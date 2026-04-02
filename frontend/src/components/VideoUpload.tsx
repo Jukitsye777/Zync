@@ -1,16 +1,14 @@
 import { useCallback, useState } from "react";
-import { Upload, Film, X } from "lucide-react";
+import { Upload, Film, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
-import { processVideo } from "@/lib/api";
-
 
 /* ---------------- TYPES ---------------- */
 
 interface VideoFile {
-  id: string;        // videos.id from DB
-  url: string;       // public_url from Supabase
+  id: string;
+  url: string;
   name: string;
   duration: number;
 }
@@ -38,19 +36,16 @@ export function VideoUploader({ onVideosChange, videos }: VideoUploaderProps) {
         const fileName = `${crypto.randomUUID()}.${ext}`;
         const filePath = `inputs/${fileName}`;
 
-        // 1️⃣ Upload to Supabase Storage
         const { error: uploadError } = await supabase.storage
           .from("videos")
           .upload(filePath, file);
 
         if (uploadError) throw uploadError;
 
-        // 2️⃣ Get public URL
         const { data: urlData } = supabase.storage
           .from("videos")
           .getPublicUrl(filePath);
 
-        // 3️⃣ Insert into videos table
         const { data: videoRow, error: dbError } = await supabase
           .from("videos")
           .insert({
@@ -84,23 +79,17 @@ export function VideoUploader({ onVideosChange, videos }: VideoUploaderProps) {
     async (e: React.DragEvent) => {
       e.preventDefault();
       setIsDragging(false);
-
       const files = Array.from(e.dataTransfer.files).filter(
-        (file) =>
-          file.type === "video/mp4" || file.type === "video/quicktime"
+        (f) => f.type === "video/mp4" || f.type === "video/quicktime"
       );
-
       await processFiles(files);
     },
     [videos]
   );
 
-  const handleFileInput = async (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const files = Array.from(e.target.files);
-      await processFiles(files);
+      await processFiles(Array.from(e.target.files));
     }
   };
 
@@ -111,20 +100,17 @@ export function VideoUploader({ onVideosChange, videos }: VideoUploaderProps) {
   /* ---------------- UI ---------------- */
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Drop zone */}
       <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setIsDragging(true);
-        }}
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
         className={cn(
-          "relative border-2 border-dashed rounded-xl p-8 transition-all duration-300 text-center",
+          "relative rounded-xl border-2 border-dashed p-6 text-center transition-all duration-200 cursor-pointer",
           isDragging
-            ? "border-primary bg-primary/10 scale-[1.02]"
-            : "border-border hover:border-primary/50 bg-card/50"
+            ? "border-violet-500/70 bg-violet-500/8 scale-[1.01]"
+            : "border-zinc-700/60 hover:border-zinc-600/80 bg-zinc-800/30 hover:bg-zinc-800/50"
         )}
       >
         <input
@@ -135,82 +121,73 @@ export function VideoUploader({ onVideosChange, videos }: VideoUploaderProps) {
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         />
 
-        <div className="flex flex-col items-center gap-3">
-          <div
-            className={cn(
-              "p-4 rounded-full transition-colors",
-              isDragging ? "bg-primary/20" : "bg-muted"
-            )}
-          >
-            <Upload
-              className={cn(
-                "w-8 h-8 transition-colors",
-                isDragging ? "text-primary" : "text-muted-foreground"
-              )}
-            />
+        <div className="flex flex-col items-center gap-2.5">
+          <div className={cn(
+            "w-10 h-10 rounded-xl flex items-center justify-center transition-colors",
+            isDragging ? "bg-violet-500/20" : "bg-zinc-700/60"
+          )}>
+            {isUploading
+              ? <Loader2 className="w-5 h-5 text-violet-400 animate-spin" />
+              : <Upload className={cn("w-5 h-5 transition-colors", isDragging ? "text-violet-400" : "text-zinc-400")} />
+            }
           </div>
-
           <div>
-            <p className="font-medium text-foreground">
-              {isUploading ? "Uploading..." : "Drop videos here"}
+            <p className={cn("text-sm font-medium transition-colors", isDragging ? "text-violet-300" : "text-zinc-300")}>
+              {isUploading ? "Uploading…" : "Drop videos here"}
             </p>
-            <p className="text-sm text-muted-foreground">
-              MP4 or MOV files
-            </p>
+            <p className="text-xs text-zinc-600 mt-0.5">MP4 or MOV files</p>
           </div>
         </div>
       </div>
 
       {/* Video thumbnails */}
       {videos.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground font-medium">
-            Uploaded ({videos.length})
-          </p>
+        <div className="grid grid-cols-2 gap-1.5">
+          {videos.map((video) => (
+            <div
+              key={video.id}
+              className="relative group rounded-lg overflow-hidden bg-zinc-800 border border-zinc-700/50"
+            >
+              <video
+                src={video.url}
+                className="w-full h-20 object-cover"
+                muted
+                onLoadedMetadata={(e) => {
+                  const target = e.target as HTMLVideoElement;
+                  const updated = videos.map((v) =>
+                    v.id === video.id ? { ...v, duration: target.duration } : v
+                  );
+                  onVideosChange(updated);
+                }}
+              />
 
-          <div className="grid grid-cols-2 gap-2">
-            {videos.map((video) => (
-              <div
-                key={video.id}
-                className="relative group rounded-lg overflow-hidden bg-muted border border-border"
-              >
-                <video
-                  src={video.url}
-                  className="w-full h-20 object-cover"
-                  muted
-                  onLoadedMetadata={(e) => {
-                    const target = e.target as HTMLVideoElement;
-                    const updated = videos.map((v) =>
-                      v.id === video.id
-                        ? { ...v, duration: target.duration }
-                        : v
-                    );
-                    onVideosChange(updated);
-                  }}
-                />
+              {/* Gradient overlay */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
 
-                <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent" />
-
-                <div className="absolute bottom-1 left-2 right-2 flex items-center justify-between">
-                  <div className="flex items-center gap-1 text-xs text-foreground">
-                    <Film className="w-3 h-3" />
-                    <span className="truncate max-w-[80px]">
-                      {video.name}
-                    </span>
-                  </div>
-                </div>
-
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity bg-background/80 hover:bg-destructive"
-                  onClick={() => removeVideo(video.id)}
-                >
-                  <X className="w-3 h-3" />
-                </Button>
+              {/* Label */}
+              <div className="absolute bottom-1.5 left-2 right-6 flex items-center gap-1">
+                <Film className="w-2.5 h-2.5 text-zinc-300 flex-shrink-0" />
+                <span className="text-[10px] text-zinc-200 truncate font-medium">{video.name}</span>
               </div>
-            ))}
-          </div>
+
+              {/* Duration badge */}
+              {video.duration > 0 && (
+                <div className="absolute top-1.5 left-1.5 bg-black/60 rounded px-1.5 py-0.5 text-[9px] font-mono text-zinc-300">
+                  {Math.floor(video.duration)}s
+                </div>
+              )}
+
+              {/* Remove button */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute top-1 right-1 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 hover:bg-red-900/80 text-zinc-300 hover:text-white rounded-md"
+                onClick={() => removeVideo(video.id)}
+              >
+                <X className="w-2.5 h-2.5" />
+              </Button>
+            </div>
+          ))}
         </div>
       )}
     </div>

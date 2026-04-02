@@ -7,6 +7,10 @@ import {
   Layers,
   Zap,
   X,
+  Sparkles,
+  Film,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -28,7 +32,6 @@ type AIScene = {
 };
 
 export default function Index() {
-  const [mergeProgress, setMergeProgress] = useState(0);
   const [isAssembling, setIsAssembling] = useState(false);
   const [videos, setVideos] = useState<VideoFile[]>([]);
   const [timelineClips, setTimelineClips] = useState<TimelineClip[]>([]);
@@ -46,17 +49,12 @@ export default function Index() {
     useState<"idle" | "analyzing" | "matching" | "done">("idle");
   const [aiScenes, setAiScenes] = useState<AIScene[]>([]);
 
-  // ── FIX: Export modal state ───────────────────────────────────────────────
   const [showExportModal, setShowExportModal] = useState(false);
 
   const { toast } = useToast();
 
   const selectedVideo = videos.find(v => v.id === selectedVideoId);
-  const selectedClip = timelineClips.find(c => c.id === selectedClipId);
-
-  // Per-video trim values — keyed by video id
   const [trimMap, setTrimMap] = useState<Record<string, { start: number; end: number }>>({});
-  // Derived trim for currently selected video — now safe to use selectedVideo
   const trimValues = selectedVideoId
     ? (trimMap[selectedVideoId] ?? { start: 0, end: selectedVideo?.duration || 10 })
     : { start: 0, end: 10 };
@@ -70,15 +68,14 @@ export default function Index() {
   const [musicVolume, setMusicVolume] = useState(0.4);
   const [muteOriginal, setMuteOriginal] = useState(false);
   const [filter, setFilter] = useState("None");
-  const [brightness, setBrightness] = useState(100); // percent, 100 = normal
-  const [contrast, setContrast] = useState(100);     // percent, 100 = normal
+  const [brightness, setBrightness] = useState(100);
+  const [contrast, setContrast] = useState(100);
   const [aspectRatio, setAspectRatio] = useState<"16:9" | "9:16" | "1:1" | "original">("original");
-  const [cropOffset, setCropOffset] = useState(50); // 0-100, 50 = center
+  const [cropOffset, setCropOffset] = useState(50);
   const [speed, setSpeed] = useState(1);
   const [overlayText, setOverlayText] = useState("");
-  // Caption position as x/y percent (0-100) within the video area
-  const [captionX, setCaptionX] = useState(50); // percent from left
-  const [captionY, setCaptionY] = useState(85); // percent from top (85 = near bottom)
+  const [captionX, setCaptionX] = useState(50);
+  const [captionY, setCaptionY] = useState(85);
 
   useEffect(() => {
     fetch("http://localhost:8000/health")
@@ -101,7 +98,6 @@ export default function Index() {
     setAiStatus("analyzing");
     setAiScenes([]);
 
-    // Send ALL uploaded videos so backend searches across all of them
     const requestBody = {
       prompt,
       videos: videos.map(v => ({
@@ -112,7 +108,7 @@ export default function Index() {
       })),
     };
 
-    console.log("🔍 Sending to backend:", requestBody);
+    console.log("Sending to backend:", requestBody);
 
     try {
       const res = await fetch("http://localhost:8000/videos/process", {
@@ -123,17 +119,16 @@ export default function Index() {
 
       if (!res.ok) {
         const errorData = await res.json();
-        console.error("❌ Error response:", errorData);
+        console.error("Error response:", errorData);
         throw new Error(JSON.stringify(errorData));
       }
 
       const data = await res.json();
-      console.log("✅ Backend AI response:", data);
+      console.log("Backend AI response:", data);
 
       if (data.selected_clips && data.selected_clips.length > 0) {
         const FPS = 30;
 
-        // ✅ Group frames by clip_id to create ONE clip per scene
         const clipGroups = new Map<number, any[]>();
         data.selected_clips.forEach((clip: any) => {
           const clipId = clip.clip_id;
@@ -143,25 +138,22 @@ export default function Index() {
           clipGroups.get(clipId)!.push(clip);
         });
 
-        console.log(`📊 Found ${clipGroups.size} unique scene(s) from ${data.selected_clips.length} frames`);
+        console.log(`Found ${clipGroups.size} unique scene(s) from ${data.selected_clips.length} frames`);
 
         const scenes: AIScene[] = [];
 
-        // ✅ Create ONE SINGLE CLIP per clip_id (from first frame to last frame)
         clipGroups.forEach((frames, clipId) => {
-          // Sort frames by index
           frames.sort((a: any, b: any) => a.frame_index - b.frame_index);
-          
+
           const firstFrame = frames[0];
           const lastFrame = frames[frames.length - 1];
-          
+
           const sourceVideo = videos.find(v => v.name === firstFrame.video_name) || videos[0];
           const VIDEO_DURATION = firstFrame.video_duration || sourceVideo?.duration || 11;
-          
-          // ✅ ONE CLIP: from first frame to last frame (spanning all frames in between)
+
           const startTime = Math.max(0, firstFrame.frame_index / FPS);
           const endTime = Math.min(VIDEO_DURATION, lastFrame.frame_index / FPS);
-          
+
           scenes.push({
             id: crypto.randomUUID(),
             label: `${sourceVideo?.name ?? "clip"} — Scene ${clipId} (${frames.length} frames, ${startTime.toFixed(1)}s - ${endTime.toFixed(1)}s)`,
@@ -170,8 +162,8 @@ export default function Index() {
             videoUrl: firstFrame.video_url || sourceVideo?.url || "",
             videoName: firstFrame.video_name || sourceVideo?.name || "Unknown",
           });
-          
-          console.log(`✅ Created clip for scene ${clipId}: ${startTime.toFixed(1)}s to ${endTime.toFixed(1)}s (${frames.length} frames)`);
+
+          console.log(`Created clip for scene ${clipId}: ${startTime.toFixed(1)}s to ${endTime.toFixed(1)}s (${frames.length} frames)`);
         });
 
         setAiScenes(scenes);
@@ -190,12 +182,10 @@ export default function Index() {
         setTimelineClips(prev => [...prev, ...newClips]);
         setAiStatus("done");
 
-        // Count how many unique videos contributed clips
-        const uniqueVideos = new Set(data.selected_clips.map((c: any) => c.video_name)).size;
         toast({
-          title: "🎬 Clips Generated!",
+          title: "Clips Generated",
           description: `${scenes.length} scene(s) found with ${data.selected_clips.length} total frames.`,
-          className: "bg-green-600 text-white border-none shadow-xl",
+          className: "bg-emerald-950 border border-emerald-800 text-emerald-200 shadow-xl",
           duration: 4000,
         });
       } else {
@@ -234,8 +224,6 @@ export default function Index() {
   };
 
   const handleAddAIScene = (scene: AIScene) => {
-    // Use the scene's own videoUrl (from multi-video AI search)
-    // Fall back to selectedVideo if not set (manual add)
     const videoUrl = scene.videoUrl || selectedVideo?.url;
     if (!videoUrl) return;
 
@@ -256,7 +244,7 @@ export default function Index() {
 
     try {
       setIsAssembling(true);
-      console.log("🚀 Sending clips to backend:", timelineClips);
+      console.log("Sending clips to backend:", timelineClips);
 
       const res = await fetch("http://localhost:8000/videos/merge", {
         method: "POST",
@@ -267,14 +255,14 @@ export default function Index() {
       if (!res.ok) throw new Error("Merge failed");
 
       const data = await res.json();
-      console.log("✅ Merge response:", data);
+      console.log("Merge response:", data);
 
       setAssembledVideoUrl(
         `http://localhost:8000/outputs/${data.output_file}?t=${Date.now()}`
       );
 
       toast({
-        title: "🎬 Video Assembled!",
+        title: "Video Assembled",
         description: "Merged video ready for preview.",
       });
     } catch (err) {
@@ -289,7 +277,6 @@ export default function Index() {
     }
   };
 
-  // ── Export: calls /videos/export to bake in all effects, then shows modal ──
   const handleExport = async () => {
     if (timelineClips.length === 0) return;
     setIsExporting(true);
@@ -323,9 +310,9 @@ export default function Index() {
       setExportedVideoUrl(url);
 
       toast({
-        title: "✅ Export Ready!",
+        title: "Export Ready",
         description: "Your video with all effects is ready to download.",
-        className: "bg-green-600 text-white border-none shadow-xl",
+        className: "bg-emerald-950 border border-emerald-800 text-emerald-200 shadow-xl",
         duration: 4000,
       });
     } catch (err) {
@@ -344,8 +331,6 @@ export default function Index() {
     const url = exportedVideoUrl || assembledVideoUrl;
     if (!url) return;
     try {
-      // Must fetch as blob — direct <a download> won't work cross-origin
-      // cache: 'no-store' forces browser to bypass cache and get fresh file
       const res = await fetch(url, { cache: "no-store" });
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
@@ -358,123 +343,140 @@ export default function Index() {
       setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
     } catch (err) {
       console.error("Download failed:", err);
-      // Fallback: open in new tab so user can save manually
       window.open(url, "_blank");
     }
   };
 
   /* ---------------- UI ---------------- */
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* HEADER */}
-      <header className="h-16 border-b flex justify-between items-center px-6">
+    <div className="min-h-screen flex flex-col bg-zinc-950 text-zinc-100">
+
+      {/* ── HEADER ─────────────────────────────────────────────────────────── */}
+      <header className="h-14 flex-shrink-0 border-b border-zinc-800/60 bg-zinc-950/95 backdrop-blur-sm flex items-center justify-between px-5 z-40">
+
+        {/* Logo */}
         <div className="flex items-center gap-3">
-          <Zap />
-          <div>
-            <h1 className="font-bold">ZYNC</h1>
-            <p className="text-xs">AI Video Editor</p>
+          <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center shadow-lg shadow-violet-500/30 flex-shrink-0">
+            <Zap className="w-4 h-4 text-white" />
+          </div>
+          <div className="leading-none">
+            <h1 className="text-sm font-bold tracking-[0.2em] bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">
+              ZYNC
+            </h1>
+            <p className="text-[10px] text-zinc-500 mt-0.5">AI Video Editor</p>
+          </div>
+
+          {/* Backend status pill */}
+          <div className={`ml-1 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium border transition-colors ${
+            backendStatus === "ok"
+              ? "bg-emerald-950/80 border-emerald-800/60 text-emerald-400"
+              : backendStatus === "loading..."
+              ? "bg-zinc-800/60 border-zinc-700/60 text-zinc-400"
+              : "bg-red-950/80 border-red-800/60 text-red-400"
+          }`}>
+            {backendStatus === "ok"
+              ? <Wifi className="w-2.5 h-2.5" />
+              : <WifiOff className="w-2.5 h-2.5" />
+            }
+            {backendStatus === "ok" ? "Connected" : backendStatus === "loading..." ? "Connecting…" : "Offline"}
           </div>
         </div>
-        <div className="flex gap-2">
+
+        {/* Actions */}
+        <div className="flex items-center gap-2">
           <Button
             onClick={handleAssembleVideo}
             disabled={timelineClips.length === 0 || isAssembling}
-            className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-6 py-3 text-base shadow-xl shadow-purple-400/40 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+            className="h-9 px-4 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/80 text-zinc-200 text-sm font-medium rounded-lg transition-all disabled:opacity-40"
           >
-            {isAssembling ? (
-              <>
-                🔄 Assembling...
-                <span className="animate-spin inline-block">⏳</span>
-              </>
-            ) : (
-              <>
-                <Layers className="w-5 h-5 mr-2" />
-                Assemble Clips
-              </>
-            )}
+            <Layers className="w-4 h-4 mr-1.5" />
+            {isAssembling ? "Assembling…" : "Assemble"}
           </Button>
 
           <Button
-            variant="outline"
             onClick={handleExport}
             disabled={timelineClips.length === 0 || isExporting}
+            className="h-9 px-4 bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold rounded-lg shadow-lg shadow-violet-500/25 transition-all active:scale-95 disabled:opacity-40"
           >
-            <Download className="w-4 h-4 mr-1" />
-            {isExporting ? "Exporting..." : "Export"}
+            <Download className="w-4 h-4 mr-1.5" />
+            {isExporting ? "Exporting…" : "Export"}
           </Button>
         </div>
       </header>
 
-      <div className="flex flex-1">
-        {/* LEFT PANEL */}
-        <aside className="w-80 border-r p-4 space-y-6">
-          <VideoUploader
-            videos={videos}
-            onVideosChange={async (v) => {
-              console.log("Index received videos:", v);
-              setVideos(v);
-              if (!selectedVideoId && v.length) setSelectedVideoId(v[0].id);
-              // Initialise trim for any new videos
-              setTrimMap(prev => {
-                const next = { ...prev };
-                v.forEach(vid => {
-                  if (!next[vid.id]) next[vid.id] = { start: 0, end: vid.duration || 10 };
-                });
-                return next;
-              });
-              if (v.length > 0) {
-                toast({
-                  title: "📹 Video Uploaded!",
-                  description: `${v[0].name} added successfully.`,
-                  className: "bg-blue-600 text-white border-none shadow-xl",
-                  duration: 3000,
-                });
-              }
+      {/* ── BODY ─────────────────────────────────────────────────────────── */}
+      <div className="flex flex-1 overflow-hidden">
 
-              try {
-                const res = await sendVideosToBackend(
-                  v.map(video => ({
-                    id: video.id,
-                    name: video.name,
-                    url: video.url,
-                    duration: video.duration,
-                  }))
-                );
-                console.log("Backend response:", res);
-              } catch (err) {
-                console.error("Failed to send videos", err);
-              }
-            }}
-          />
+        {/* ── LEFT PANEL ─────────────────────────────────────────────────── */}
+        <aside className="w-80 flex-shrink-0 border-r border-zinc-800/60 bg-zinc-900/50 flex flex-col overflow-y-auto">
 
-          {/* Video selector — click to switch which video to trim */}
+          {/* Upload section */}
+          <div className="px-4 pt-4 pb-3">
+            <SectionLabel>Upload</SectionLabel>
+            <VideoUploader
+              videos={videos}
+              onVideosChange={async (v) => {
+                console.log("Index received videos:", v);
+                setVideos(v);
+                if (!selectedVideoId && v.length) setSelectedVideoId(v[0].id);
+                setTrimMap(prev => {
+                  const next = { ...prev };
+                  v.forEach(vid => {
+                    if (!next[vid.id]) next[vid.id] = { start: 0, end: vid.duration || 10 };
+                  });
+                  return next;
+                });
+                if (v.length > 0) {
+                  toast({
+                    title: "Video Uploaded",
+                    description: `${v[v.length - 1].name} added successfully.`,
+                    className: "bg-zinc-900 border border-zinc-700 text-zinc-100 shadow-xl",
+                    duration: 3000,
+                  });
+                }
+
+                try {
+                  const res = await sendVideosToBackend(
+                    v.map(video => ({
+                      id: video.id,
+                      name: video.name,
+                      url: video.url,
+                      duration: video.duration,
+                    }))
+                  );
+                  console.log("Backend response:", res);
+                } catch (err) {
+                  console.error("Failed to send videos", err);
+                }
+              }}
+            />
+          </div>
+
+          {/* Video selector */}
           {videos.length > 0 && (
-            <div className="space-y-1.5">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                Uploaded Videos ({videos.length})
-              </h3>
-              <div className="space-y-1 max-h-40 overflow-y-auto">
+            <div className="px-4 pb-3">
+              <SectionLabel>Library ({videos.length})</SectionLabel>
+              <div className="space-y-1 max-h-44 overflow-y-auto -mx-1 px-1">
                 {videos.map(v => (
                   <button
                     key={v.id}
                     onClick={() => {
                       setSelectedVideoId(v.id);
-                      // Only reset trim if this video hasn't been trimmed before
                       setTrimMap(prev => ({
                         ...prev,
                         [v.id]: prev[v.id] ?? { start: 0, end: v.duration || 10 },
                       }));
                     }}
-                    className={`w-full text-left px-2 py-1.5 rounded-md border text-xs transition-colors flex items-center gap-2 ${
+                    className={`w-full text-left px-2.5 py-2 rounded-lg border text-xs transition-all flex items-center gap-2 ${
                       selectedVideoId === v.id
-                        ? "bg-purple-600 text-white border-purple-600"
-                        : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                        ? "bg-violet-600/15 border-violet-500/50 text-violet-300"
+                        : "border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200 hover:bg-zinc-800/50"
                     }`}
                   >
-                    <span className="text-base">🎬</span>
-                    <span className="truncate flex-1">{v.name}</span>
-                    {v.duration && (
-                      <span className="opacity-60 shrink-0">
+                    <Film className={`w-3.5 h-3.5 flex-shrink-0 ${selectedVideoId === v.id ? "text-violet-400" : "text-zinc-500"}`} />
+                    <span className="truncate flex-1 font-medium">{v.name}</span>
+                    {v.duration > 0 && (
+                      <span className="opacity-50 shrink-0 font-mono">
                         {Math.floor(v.duration)}s
                       </span>
                     )}
@@ -484,8 +486,10 @@ export default function Index() {
             </div>
           )}
 
+          {/* Trim + Add to Timeline */}
           {selectedVideo && (
-            <>
+            <div className="px-4 pb-3 space-y-3">
+              <SectionLabel>Trim</SectionLabel>
               <TrimControls
                 duration={selectedVideo.duration || 10}
                 trimStart={trimValues.start}
@@ -493,58 +497,77 @@ export default function Index() {
                 videoUrl={selectedVideo.url}
                 onTrimChange={(s, e) => setTrimValues({ start: s, end: e })}
               />
-              <Button onClick={handleAddToTimeline}>
-                <Plus className="w-4 h-4" /> Add to Timeline
-              </Button>
-            </>
+              <button
+                onClick={handleAddToTimeline}
+                className="w-full flex items-center justify-center gap-2 h-9 rounded-lg border border-dashed border-zinc-700 text-zinc-400 text-xs font-medium hover:border-violet-500/60 hover:text-violet-400 hover:bg-violet-500/5 transition-all"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add to Timeline
+              </button>
+            </div>
           )}
 
+          {/* Divider */}
+          <div className="mx-4 border-t border-zinc-800/60" />
+
           {/* AI PANEL */}
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold">AI Prompt</h3>
+          <div className="px-4 py-3 space-y-3 flex-1">
+            <SectionLabel icon={<Sparkles className="w-3 h-3 text-violet-400" />}>
+              AI Prompt
+            </SectionLabel>
+
             <textarea
               value={prompt}
               onChange={e => setPrompt(e.target.value)}
               placeholder="e.g. classroom setting with a wooden desk"
-              className="w-full border rounded p-2 text-sm"
               rows={3}
+              className="w-full bg-zinc-800/60 border border-zinc-700/60 rounded-lg p-3 text-sm text-zinc-200 placeholder:text-zinc-600 resize-none focus:outline-none focus:border-violet-500/50 focus:bg-zinc-800 transition-all"
             />
 
-            <Button
-              className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 text-base shadow-xl shadow-purple-400/40 transition-all active:scale-95 disabled:opacity-50"
+            <button
               onClick={handleRunAI}
               disabled={!videos.length || !prompt || aiStatus === "analyzing"}
+              className="w-full h-10 rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white text-sm font-semibold shadow-lg shadow-violet-500/20 transition-all active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center gap-2"
             >
-              {aiStatus === "analyzing" ? "🔄 Generating Clips..." : "Run AI Editor"}
-            </Button>
+              {aiStatus === "analyzing" ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Generating Clips…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Run AI Editor
+                </>
+              )}
+            </button>
 
             {aiStatus === "analyzing" && (
-              <p className="text-xs text-muted-foreground">🔍 Analyzing video...</p>
+              <p className="text-xs text-zinc-500 text-center">Analyzing video frames…</p>
             )}
 
             {aiStatus === "done" && aiScenes.length === 0 && (
-              <p className="text-xs text-yellow-600">⚠️ No matching scenes found</p>
+              <p className="text-xs text-amber-500/80 text-center">No matching scenes found</p>
             )}
 
             {aiStatus === "done" && aiScenes.length > 0 && (
               <div className="space-y-2">
-                <p className="text-xs text-green-600 font-medium">
-                  ✅ Found {aiScenes.length} matching scenes
+                <p className="text-xs text-emerald-400 font-medium">
+                  {aiScenes.length} matching scene{aiScenes.length > 1 ? "s" : ""} found
                 </p>
-                <div className="max-h-64 overflow-y-auto space-y-2">
+                <div className="max-h-60 overflow-y-auto space-y-1.5">
                   {aiScenes.map(scene => (
                     <div
                       key={scene.id}
-                      className="border rounded p-2 flex justify-between items-center text-sm hover:bg-gray-50"
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-zinc-800/60 border border-zinc-700/50 hover:border-zinc-600/80 transition-colors"
                     >
-                      <span className="text-xs">{scene.label}</span>
-                      <Button
-                        size="sm"
+                      <span className="text-xs text-zinc-300 truncate">{scene.label}</span>
+                      <button
                         onClick={() => handleAddAIScene(scene)}
-                        className="text-xs"
+                        className="flex-shrink-0 text-[11px] font-semibold text-violet-400 hover:text-violet-300 border border-violet-500/40 hover:border-violet-400/60 rounded-md px-2 py-0.5 transition-colors hover:bg-violet-500/10"
                       >
                         Add
-                      </Button>
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -553,8 +576,8 @@ export default function Index() {
           </div>
         </aside>
 
-        {/* CENTER */}
-        <main className="flex-1">
+        {/* ── CENTER ─────────────────────────────────────────────────────── */}
+        <main className="flex-1 bg-zinc-950 min-w-0">
           <Timeline
             clips={timelineClips}
             selectedClipId={selectedClipId}
@@ -566,194 +589,157 @@ export default function Index() {
           />
         </main>
 
-        {/* RIGHT */}
-        <aside className="w-96 border-l flex flex-col p-4 gap-4">
-          {/* Source Preview — key forces remount when selected video changes */}
-          <VideoPreview
-            key={selectedVideoId ?? "no-source"}
-            title="Source Preview"
-            videoUrl={selectedVideo?.url || null}
-            enableFades={false}
-          />
+        {/* ── RIGHT PANEL ────────────────────────────────────────────────── */}
+        <aside className="w-96 flex-shrink-0 border-l border-zinc-800/60 bg-zinc-900/50 flex flex-col overflow-y-auto">
 
-          {/* Output Preview — plays the backend-merged MP4 with fade overlays */}
-          {/* mergedClipBoundaries tells VideoPreview where each clip starts/ends */}
-          {/* within the merged video so it can apply per-clip fades correctly   */}
-          <VideoPreview
-            key={assembledVideoUrl ?? "no-output"}
-            title="Output Preview"
-            videoUrl={assembledVideoUrl}
-            playbackRate={speed}
-            filter={filter}
-            overlayText={overlayText}
-            captionX={captionX}
-            captionY={captionY}
-            onCaptionMove={(x, y) => { setCaptionX(x); setCaptionY(y); }}
-            music={music}
-            musicStart={0}
-            enableFades={true}
-            muteOriginal={muteOriginal}
-            brightness={brightness}
-            contrast={contrast}
-            aspectRatio={aspectRatio}
-            cropOffset={cropOffset}
-            mergedClipBoundaries={timelineClips.map((c, i) => {
-              // Calculate where this clip starts in the merged video timeline
-              const globalStart = timelineClips
-                .slice(0, i)
-                .reduce((sum, prev) => sum + (prev.trimEnd - prev.trimStart), 0);
-              const globalEnd = globalStart + (c.trimEnd - c.trimStart);
-              return { globalStart, globalEnd, fadeIn: c.fadeIn ?? 0, fadeOut: c.fadeOut ?? 0 };
-            })}
-          />
+          {/* Source Preview */}
+          <div className="p-3 border-b border-zinc-800/60">
+            <VideoPreview
+              key={selectedVideoId ?? "no-source"}
+              title="Source Preview"
+              videoUrl={selectedVideo?.url || null}
+              enableFades={false}
+            />
+          </div>
 
-          {/* POST PRODUCTION */}
-          <div className="border-t pt-4 space-y-3 overflow-y-auto">
-            <h3 className="text-sm font-semibold">Post-Production</h3>
+          {/* Output Preview */}
+          <div className="p-3 border-b border-zinc-800/60">
+            <VideoPreview
+              key={assembledVideoUrl ?? "no-output"}
+              title="Output Preview"
+              videoUrl={assembledVideoUrl}
+              playbackRate={speed}
+              filter={filter}
+              overlayText={overlayText}
+              captionX={captionX}
+              captionY={captionY}
+              onCaptionMove={(x, y) => { setCaptionX(x); setCaptionY(y); }}
+              music={music}
+              musicStart={0}
+              enableFades={true}
+              muteOriginal={muteOriginal}
+              brightness={brightness}
+              contrast={contrast}
+              aspectRatio={aspectRatio}
+              cropOffset={cropOffset}
+              mergedClipBoundaries={timelineClips.map((c, i) => {
+                const globalStart = timelineClips
+                  .slice(0, i)
+                  .reduce((sum, prev) => sum + (prev.trimEnd - prev.trimStart), 0);
+                const globalEnd = globalStart + (c.trimEnd - c.trimStart);
+                return { globalStart, globalEnd, fadeIn: c.fadeIn ?? 0, fadeOut: c.fadeOut ?? 0 };
+              })}
+            />
+          </div>
 
-            {/* FADES */}
+          {/* Post-Production Controls */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-5">
+            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-widest">Post-Production</h3>
+
+            {/* Fades */}
             <FadeControls clips={timelineClips} onClipsChange={setTimelineClips} />
 
-            {/* MUSIC + VOLUME + MUTE — one compact row */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium">Background Music</label>
+            {/* Music */}
+            <div className="space-y-2">
+              <ControlLabel>Background Music</ControlLabel>
               <div className="flex gap-2 items-center">
                 <select
                   value={music}
                   onChange={e => setMusic(e.target.value)}
-                  className="flex-1 border rounded p-1.5 text-xs"
+                  className="flex-1 bg-zinc-800/60 border border-zinc-700/60 rounded-lg px-2.5 py-2 text-xs text-zinc-200 focus:outline-none focus:border-violet-500/50"
                 >
-                  {MUSIC_OPTIONS.map(m => <option key={m}>{m}</option>)}
+                  {MUSIC_OPTIONS.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
-                {/* Mute original audio toggle */}
                 <button
                   onClick={() => setMuteOriginal(m => !m)}
                   title={muteOriginal ? "Unmute original audio" : "Mute original audio"}
-                  className={`px-2 py-1.5 rounded border text-xs font-medium transition-colors ${
+                  className={`px-2.5 py-2 rounded-lg border text-xs font-medium transition-colors ${
                     muteOriginal
-                      ? "bg-red-100 border-red-300 text-red-700"
-                      : "border-border text-muted-foreground hover:border-primary/50"
+                      ? "bg-red-950/60 border-red-800/60 text-red-400"
+                      : "bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:border-zinc-600"
                   }`}
                 >
                   {muteOriginal ? "🔇" : "🔊"}
                 </button>
               </div>
-              {/* Music volume — only show when music selected */}
               {music !== "None" && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-muted-foreground w-12">Vol</span>
-                  <input type="range" min="0" max="1" step="0.05"
-                    value={musicVolume}
-                    onChange={e => setMusicVolume(Number(e.target.value))}
-                    className="flex-1 h-1.5"
-                  />
-                  <span className="text-[10px] font-mono text-muted-foreground w-8 text-right">
-                    {Math.round(musicVolume * 100)}%
-                  </span>
-                </div>
+                <SliderRow
+                  label="Vol"
+                  value={musicVolume}
+                  min={0} max={1} step={0.05}
+                  onChange={setMusicVolume}
+                  display={`${Math.round(musicVolume * 100)}%`}
+                />
               )}
             </div>
 
-            {/* FILTER + BRIGHTNESS/CONTRAST */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium">Filter & Colour</label>
+            {/* Filter & Colour */}
+            <div className="space-y-2">
+              <ControlLabel>Filter & Colour</ControlLabel>
               <select
                 value={filter}
                 onChange={e => setFilter(e.target.value)}
-                className="w-full border rounded p-1.5 text-xs"
+                className="w-full bg-zinc-800/60 border border-zinc-700/60 rounded-lg px-2.5 py-2 text-xs text-zinc-200 focus:outline-none focus:border-violet-500/50"
               >
-                {FILTERS.map(f => <option key={f}>{f}</option>)}
+                {FILTERS.map(f => <option key={f} value={f}>{f}</option>)}
               </select>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-muted-foreground w-12">Bright</span>
-                <input type="range" min="50" max="150" step="1"
-                  value={brightness}
-                  onChange={e => setBrightness(Number(e.target.value))}
-                  className="flex-1 h-1.5"
-                />
-                <span className="text-[10px] font-mono text-muted-foreground w-8 text-right">
-                  {brightness}%
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-muted-foreground w-12">Contrast</span>
-                <input type="range" min="50" max="150" step="1"
-                  value={contrast}
-                  onChange={e => setContrast(Number(e.target.value))}
-                  className="flex-1 h-1.5"
-                />
-                <span className="text-[10px] font-mono text-muted-foreground w-8 text-right">
-                  {contrast}%
-                </span>
-              </div>
+              <SliderRow label="Bright" value={brightness} min={50} max={150} step={1} onChange={setBrightness} display={`${brightness}%`} />
+              <SliderRow label="Contrast" value={contrast} min={50} max={150} step={1} onChange={setContrast} display={`${contrast}%`} />
             </div>
 
-            {/* ASPECT RATIO — icon button row */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium">Aspect Ratio</label>
-              <div className="flex gap-1.5">
+            {/* Aspect Ratio */}
+            <div className="space-y-2">
+              <ControlLabel>Aspect Ratio</ControlLabel>
+              <div className="grid grid-cols-4 gap-1.5">
                 {(["original", "16:9", "9:16", "1:1"] as const).map(r => (
                   <button
                     key={r}
                     onClick={() => setAspectRatio(r)}
-                    className={`flex-1 py-1.5 rounded border text-[10px] font-medium transition-colors ${
+                    className={`py-1.5 rounded-lg border text-[11px] font-medium transition-all ${
                       aspectRatio === r
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "border-border text-muted-foreground hover:border-primary/50"
+                        ? "bg-violet-600/20 border-violet-500/60 text-violet-300"
+                        : "border-zinc-700/60 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
                     }`}
                   >
                     {r === "original" ? "Auto" : r}
                   </button>
                 ))}
               </div>
-
-              {/* Crop position slider — shown when any crop ratio active */}
               {aspectRatio !== "original" && (
-                <div className="flex items-center gap-2 pt-1">
-                  <span className="text-[10px] text-muted-foreground w-14 shrink-0">
-                    {aspectRatio === "9:16" ? "← H-pos →" : "↑ V-pos ↓"}
-                  </span>
-                  <input
-                    type="range" min="0" max="100" step="1"
-                    value={cropOffset}
-                    onChange={e => setCropOffset(Number(e.target.value))}
-                    className="flex-1 h-1.5"
-                  />
-                  <button
-                    onClick={() => setCropOffset(50)}
-                    className="text-[10px] text-muted-foreground hover:text-primary px-1"
-                    title="Reset to center"
-                  >↺</button>
-                </div>
+                <SliderRow
+                  label={aspectRatio === "9:16" ? "H-pos" : "V-pos"}
+                  value={cropOffset} min={0} max={100} step={1}
+                  onChange={setCropOffset}
+                  display={
+                    <button onClick={() => setCropOffset(50)} className="text-[10px] text-zinc-500 hover:text-violet-400 transition-colors" title="Center">↺</button>
+                  }
+                />
               )}
             </div>
 
-            {/* SPEED */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between">
-                <label className="text-xs font-medium">Speed</label>
-                <span className="text-xs font-mono text-muted-foreground">{speed}x</span>
-              </div>
+            {/* Speed */}
+            <div className="space-y-2">
+              <ControlLabel>Playback Speed <span className="text-zinc-500 font-mono">{speed}x</span></ControlLabel>
               <input type="range" min="0.5" max="2" step="0.25"
                 value={speed}
                 onChange={e => setSpeed(Number(e.target.value))}
-                className="w-full h-1.5"
+                className="w-full h-1.5 rounded-full"
               />
             </div>
 
-            {/* CAPTION + POSITION */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium">Caption</label>
+            {/* Caption */}
+            <div className="space-y-2">
+              <ControlLabel>Caption</ControlLabel>
               <input
                 type="text"
                 value={overlayText}
                 onChange={e => setOverlayText(e.target.value)}
                 placeholder="Enter caption text…"
-                className="w-full border rounded p-1.5 text-xs"
+                className="w-full bg-zinc-800/60 border border-zinc-700/60 rounded-lg px-3 py-2 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-violet-500/50 transition-all"
               />
               {overlayText && (
-                <p className="text-[10px] text-muted-foreground">
-                  ✋ Drag the caption in the Output Preview to reposition it
+                <p className="text-[11px] text-zinc-600">
+                  Drag the caption in Output Preview to reposition
                 </p>
               )}
             </div>
@@ -761,36 +747,35 @@ export default function Index() {
         </aside>
       </div>
 
-      {/* Export Modal — shows baked export with all effects */}
+      {/* ── EXPORT MODAL ──────────────────────────────────────────────────── */}
       {showExportModal && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-background rounded-xl shadow-2xl w-full max-w-xl flex flex-col gap-4 p-6 relative my-auto">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-xl flex flex-col gap-5 p-6 relative">
             <button
               onClick={() => setShowExportModal(false)}
-              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
-              title="Close"
+              className="absolute top-4 right-4 text-zinc-500 hover:text-zinc-300 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <h2 className="text-lg font-bold">Export</h2>
+            <div>
+              <h2 className="text-base font-semibold text-zinc-100">Export</h2>
+              <p className="text-xs text-zinc-500 mt-0.5">All effects baked into final file</p>
+            </div>
 
-            {/* Loading state */}
+            {/* Loading */}
             {isExporting && (
-              <div className="flex flex-col items-center justify-center py-12 gap-3">
-                <span className="animate-spin text-4xl">⏳</span>
-                <p className="text-sm text-muted-foreground">Baking effects into video...</p>
-                <p className="text-xs text-muted-foreground/60">
-                  Filter, music, overlays and fades are being rendered
-                </p>
+              <div className="flex flex-col items-center justify-center py-12 gap-4">
+                <div className="w-12 h-12 border-2 border-zinc-700 border-t-violet-500 rounded-full animate-spin" />
+                <p className="text-sm text-zinc-400">Rendering video…</p>
+                <p className="text-xs text-zinc-600">Filter, music, overlays and fades are being baked in</p>
               </div>
             )}
 
-            {/* Ready state */}
+            {/* Ready */}
             {!isExporting && exportedVideoUrl && (
               <>
-                {/* Relative wrapper so caption can overlay the video */}
-                <div className="relative w-full rounded-lg overflow-hidden bg-black" style={{ maxHeight: "40vh" }}>
+                <div className="relative w-full rounded-xl overflow-hidden bg-black border border-zinc-800" style={{ maxHeight: "40vh" }}>
                   <video
                     key={exportedVideoUrl}
                     src={exportedVideoUrl}
@@ -799,7 +784,6 @@ export default function Index() {
                     style={{
                       maxHeight: "40vh",
                       objectFit: "contain",
-                      // Apply CSS effects as preview — they are also baked in the file
                       filter: [
                         FILTER_STYLES_EXPORT[filter] ?? "",
                         brightness !== 100 || contrast !== 100
@@ -808,35 +792,34 @@ export default function Index() {
                       ].filter(Boolean).join(" ") || "none",
                     }}
                   />
-                  {/* Caption already baked into video file — no overlay needed */}
                 </div>
 
-                {/* Effects summary — all baked into the downloaded file */}
+                {/* Effects tags */}
                 <div className="flex flex-wrap gap-2 text-xs">
                   {filter !== "None" && (
-                    <span className="bg-muted rounded px-2 py-1">🎨 Filter: {filter}</span>
+                    <Tag>Filter: {filter}</Tag>
                   )}
                   {music !== "None" && (
-                    <span className="bg-muted rounded px-2 py-1">🎵 Music: {music}</span>
+                    <Tag>Music: {music}</Tag>
                   )}
                   {overlayText && (
-                    <span className="bg-muted rounded px-2 py-1">💬 Caption: "{overlayText}"</span>
+                    <Tag>Caption: "{overlayText}"</Tag>
                   )}
                   {speed !== 1 && (
-                    <span className="bg-muted rounded px-2 py-1">⚡ Speed: {speed}x</span>
+                    <Tag>Speed: {speed}x</Tag>
                   )}
                   {timelineClips.some(c => (c.fadeIn ?? 0) > 0 || (c.fadeOut ?? 0) > 0) && (
-                    <span className="bg-purple-100 text-purple-700 rounded px-2 py-1">
-                      🌅 Fades: {timelineClips.filter(c => (c.fadeIn ?? 0) > 0 || (c.fadeOut ?? 0) > 0).length} clips
-                    </span>
+                    <Tag variant="accent">Fades: {timelineClips.filter(c => (c.fadeIn ?? 0) > 0 || (c.fadeOut ?? 0) > 0).length} clips</Tag>
                   )}
                 </div>
 
-                <div className="flex gap-3 justify-end">
-                  <Button variant="outline" onClick={() => setShowExportModal(false)}>
+                <div className="flex gap-3 justify-end pt-1">
+                  <Button variant="outline" onClick={() => setShowExportModal(false)}
+                    className="border-zinc-700 text-zinc-400 hover:bg-zinc-800">
                     Close
                   </Button>
-                  <Button onClick={handleDirectDownload} className="bg-green-600 hover:bg-green-700 text-white">
+                  <Button onClick={handleDirectDownload}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20">
                     <Download className="w-4 h-4 mr-2" />
                     Download Video
                   </Button>
@@ -844,11 +827,12 @@ export default function Index() {
               </>
             )}
 
-            {/* Error state */}
+            {/* Error */}
             {!isExporting && !exportedVideoUrl && (
               <div className="text-center py-8">
-                <p className="text-sm text-destructive">Export failed. Please try again.</p>
-                <Button variant="outline" className="mt-4" onClick={() => setShowExportModal(false)}>
+                <p className="text-sm text-red-400">Export failed. Please try again.</p>
+                <Button variant="outline" className="mt-4 border-zinc-700 text-zinc-400"
+                  onClick={() => setShowExportModal(false)}>
                   Close
                 </Button>
               </div>
@@ -860,7 +844,64 @@ export default function Index() {
   );
 }
 
-// Needed for the export modal video preview filter
+/* ── Small reusable UI helpers ─────────────────────────────────────────────── */
+
+function SectionLabel({ children, icon }: { children: React.ReactNode; icon?: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-1.5 mb-2.5">
+      {icon}
+      <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">{children}</span>
+      <div className="flex-1 h-px bg-zinc-800/80" />
+    </div>
+  );
+}
+
+function ControlLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <label className="flex items-center gap-1.5 text-xs font-medium text-zinc-400">{children}</label>
+  );
+}
+
+function SliderRow({
+  label, value, min, max, step, onChange, display,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+  display?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[11px] text-zinc-500 w-14 flex-shrink-0">{label}</span>
+      <input type="range" min={min} max={max} step={step}
+        value={value}
+        onChange={e => onChange(Number(e.target.value))}
+        className="flex-1 h-1.5 rounded-full"
+      />
+      {typeof display === "string"
+        ? <span className="text-[11px] font-mono text-zinc-500 w-10 text-right flex-shrink-0">{display}</span>
+        : display
+      }
+    </div>
+  );
+}
+
+function Tag({ children, variant = "default" }: { children: React.ReactNode; variant?: "default" | "accent" }) {
+  return (
+    <span className={`rounded-md px-2 py-1 text-[11px] font-medium ${
+      variant === "accent"
+        ? "bg-violet-950/60 border border-violet-800/40 text-violet-300"
+        : "bg-zinc-800 border border-zinc-700/60 text-zinc-400"
+    }`}>
+      {children}
+    </span>
+  );
+}
+
+// CSS filter map for the export modal video preview
 const FILTER_STYLES_EXPORT: Record<string, string> = {
   None: "none",
   Warm: "brightness(1.1) saturate(1.2) sepia(0.2)",
