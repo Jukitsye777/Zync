@@ -19,7 +19,7 @@ import { TrimControls } from "@/components/TrimControls";
 import { Timeline, type TimelineClip } from "@/components/Timeline";
 import { VideoPreview } from "@/components/VideoPreview";
 import { useToast } from "@/hooks/use-toast";
-import { sendVideosToBackend } from "../lib/api";
+import { sendVideosToBackend, runEditPrompt } from "../lib/api";
 import { FadeControls } from "@/components/FadeControls";
 
 type AIScene = {
@@ -98,110 +98,106 @@ export default function Index() {
     setAiStatus("analyzing");
     setAiScenes([]);
 
-    const requestBody = {
-      prompt,
-      videos: videos.map(v => ({
-        id: v.id,
-        name: v.name,
-        url: v.url,
-        duration: v.duration,
-      })),
-    };
-
-    console.log("Sending to backend:", requestBody);
-
     try {
-      const res = await fetch("http://localhost:8000/videos/process", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-      });
+      const data = await runEditPrompt(
+        prompt,
+        videos.map(v => ({ id: v.id, name: v.name, url: v.url, duration: v.duration }))
+      );
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        console.error("Error response:", errorData);
-        throw new Error(JSON.stringify(errorData));
+      console.log("Backend response:", data);
+
+      // ── Auto-apply edit settings parsed from the prompt ──────────────
+      const s = data.edit_settings;
+      if (s && Object.keys(s).length > 0) {
+        if (s.filter)       setFilter(s.filter);
+        if (s.music)        setMusic(s.music);
+        if (s.musicVolume !== undefined) setMusicVolume(s.musicVolume);
+        if (s.muteOriginal !== undefined) setMuteOriginal(s.muteOriginal);
+        if (s.speed !== undefined)       setSpeed(s.speed);
+        if (s.brightness !== undefined)  setBrightness(s.brightness);
+        if (s.contrast !== undefined)    setContrast(s.contrast);
+        if (s.aspectRatio)  setAspectRatio(s.aspectRatio);
+        if (s.overlayText)  setOverlayText(s.overlayText);
+
+        toast({
+          title: "Edit settings applied",
+          description: data.settings_summary,
+          className: "bg-violet-950 border border-violet-700 text-violet-200 shadow-xl",
+          duration: 5000,
+        });
       }
 
-      const data = await res.json();
-      console.log("Backend AI response:", data);
-
+      // ── Build timeline clips from matched frames ──────────────────────
       if (data.selected_clips && data.selected_clips.length > 0) {
         const FPS = 30;
-
         const clipGroups = new Map<number, any[]>();
-        data.selected_clips.forEach((clip: any) => {
-          const clipId = clip.clip_id;
-          if (!clipGroups.has(clipId)) {
-            clipGroups.set(clipId, []);
-          }
-          clipGroups.get(clipId)!.push(clip);
-        });
 
-        console.log(`Found ${clipGroups.size} unique scene(s) from ${data.selected_clips.length} frames`);
+        data.selected_clips.forEach((clip: any) => {
+          const id = clip.clip_id;
+          if (!clipGroups.has(id)) clipGroups.set(id, []);
+          clipGroups.get(id)!.push(clip);
+        });
 
         const scenes: AIScene[] = [];
 
         clipGroups.forEach((frames, clipId) => {
           frames.sort((a: any, b: any) => a.frame_index - b.frame_index);
-
-          const firstFrame = frames[0];
-          const lastFrame = frames[frames.length - 1];
-
-          const sourceVideo = videos.find(v => v.name === firstFrame.video_name) || videos[0];
-          const VIDEO_DURATION = firstFrame.video_duration || sourceVideo?.duration || 11;
-
-          const startTime = Math.max(0, firstFrame.frame_index / FPS);
-          const endTime = Math.min(VIDEO_DURATION, lastFrame.frame_index / FPS);
+          const first = frames[0];
+          const last  = frames[frames.length - 1];
+          const sourceVideo = videos.find(v => v.name === first.video_name) || videos[0];
+          const totalDur = first.video_duration || sourceVideo?.duration || 11;
+          const startTime = Math.max(0, first.frame_index / FPS);
+          const endTime   = Math.min(totalDur, last.frame_index / FPS);
 
           scenes.push({
             id: crypto.randomUUID(),
-            label: `${sourceVideo?.name ?? "clip"} — Scene ${clipId} (${frames.length} frames, ${startTime.toFixed(1)}s - ${endTime.toFixed(1)}s)`,
+            label: `${sourceVideo?.name ?? "clip"} — Scene ${clipId} (${frames.length} frames, ${startTime.toFixed(1)}s–${endTime.toFixed(1)}s)`,
             start: startTime,
             end: endTime,
-            videoUrl: firstFrame.video_url || sourceVideo?.url || "",
-            videoName: firstFrame.video_name || sourceVideo?.name || "Unknown",
+            videoUrl: first.video_url || sourceVideo?.url || "",
+            videoName: first.video_name || sourceVideo?.name || "Unknown",
           });
-
-          console.log(`Created clip for scene ${clipId}: ${startTime.toFixed(1)}s to ${endTime.toFixed(1)}s (${frames.length} frames)`);
         });
 
         setAiScenes(scenes);
-
-        const newClips: TimelineClip[] = scenes.map(scene => ({
-          id: crypto.randomUUID(),
-          name: scene.label,
-          duration: scene.end - scene.start,
-          trimStart: scene.start,
-          trimEnd: scene.end,
-          videoUrl: scene.videoUrl || "",
-          prompt: prompt,
-          createdAt: Date.now(),
-        }));
-
-        setTimelineClips(prev => [...prev, ...newClips]);
+        setTimelineClips(prev => [
+          ...prev,
+          ...scenes.map(scene => ({
+            id: crypto.randomUUID(),
+            name: scene.label,
+            duration: scene.end - scene.start,
+            trimStart: scene.start,
+            trimEnd: scene.end,
+            videoUrl: scene.videoUrl || "",
+            prompt,
+            createdAt: Date.now(),
+          })),
+        ]);
         setAiStatus("done");
 
         toast({
           title: "Clips Generated",
-          description: `${scenes.length} scene(s) found with ${data.selected_clips.length} total frames.`,
+          description: `${scenes.length} scene(s) found across ${data.selected_clips.length} frames.`,
           className: "bg-emerald-950 border border-emerald-800 text-emerald-200 shadow-xl",
           duration: 4000,
         });
       } else {
         setAiStatus("idle");
-        toast({
-          title: "No matches found",
-          description: "Try a different prompt.",
-          variant: "destructive",
-        });
+        // Still show settings toast if edit keywords were found even with no clips
+        if (!s || Object.keys(s).length === 0) {
+          toast({
+            title: "No matches found",
+            description: "Try describing what you see in the video.",
+            variant: "destructive",
+          });
+        }
       }
     } catch (err) {
       console.error(err);
       setAiStatus("idle");
       toast({
         title: "Backend error",
-        description: "Failed to process video.",
+        description: "Failed to process prompt.",
         variant: "destructive",
       });
     }

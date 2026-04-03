@@ -12,6 +12,7 @@ from hanna_rep.src.similarity_filter import SimilarityFilter
 from post_processing import merge_clips_from_urls
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from edit_config import parse_edit_prompt, describe_settings
 
 app = FastAPI()
 OUTPUT_DIR = "outputs"
@@ -85,6 +86,13 @@ class AssembleClip(BaseModel):
     trimEnd: float
     fadeIn: Optional[float] = 0.0
     fadeOut: Optional[float] = 0.0
+
+class EditPromptPayload(BaseModel):
+    prompt: str
+    videos: Optional[List[Video]] = None
+
+    class Config:
+        extra = "ignore"
 
 class ExportEffects(BaseModel):
     clips: List[AssembleClip]
@@ -185,6 +193,66 @@ def process_video_route(payload: ProcessPayload):
     return {
         "status": "processed",
         "selected_clips": all_clips
+    }
+
+
+@app.post("/videos/edit-prompt")
+def edit_prompt_route(payload: EditPromptPayload):
+    """
+    Combined endpoint: finds matching clips AND parses editing instructions
+    from a single natural language prompt.
+
+    Example prompt:
+      "sad video, warm golden colour grade, lofi music at 30%,
+       slow motion, title 'Missing You', fade to black transitions"
+
+    Returns:
+        selected_clips  — same format as /videos/process
+        edit_settings   — filter, music, speed, brightness, etc. for the frontend
+        settings_summary — human-readable description of what was auto-configured
+    """
+    print(f"EDIT-PROMPT: {payload.prompt}")
+
+    # ── 1. Parse editing instructions ────────────────────────────────────
+    edit_settings = parse_edit_prompt(payload.prompt)
+    summary = describe_settings(edit_settings)
+    print(f"  Parsed settings: {summary}")
+
+    # ── 2. Run semantic clip matching (same logic as /videos/process) ────
+    selected_clips = []
+
+    if payload.videos:
+        video_url_map      = {v.name: v.url      for v in payload.videos}
+        video_duration_map = {v.name: v.duration  for v in payload.videos}
+
+        sf = SimilarityFilter()
+
+        for video in payload.videos:
+            base_name = video.name.replace(".mp4", "")
+            try:
+                clips = sf.score_and_select(
+                    video_stem=base_name,
+                    user_prompt=payload.prompt,
+                    match_mode="any",
+                )
+                for clip in clips:
+                    clip["video_name"]     = video.name
+                    clip["video_url"]      = video_url_map.get(video.name, "")
+                    clip["video_duration"] = video_duration_map.get(video.name) or 11
+                selected_clips.extend(clips)
+                print(f"  {base_name}: {len(clips)} clip(s) found")
+            except Exception as e:
+                print(f"  {base_name}: search failed — {e}")
+
+        selected_clips.sort(key=lambda c: c.get("score", 0), reverse=True)
+
+    print(f"  Total clips: {len(selected_clips)}")
+
+    return {
+        "status": "processed",
+        "selected_clips": selected_clips,
+        "edit_settings": edit_settings,
+        "settings_summary": summary,
     }
 
 
