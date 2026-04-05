@@ -1,0 +1,54 @@
+# Python virtual environments
+venv/
+*venv*/
+*_env/
+eval_env/
+spydor_env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+.next/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Runtime data / generated outputs (not source code)
+backend/input_video/
+backend/input_videos/
+input_videos/
+input_video/
+backend/outputs/
+backend/output_clips/
+output_clips/
+backend/output_description/
+output_description/
+backend/venv/
+backend/eval_env/
+backend/spydor_env/
+
+# Media files
+*.mp4
+*.mov
+*.MOV
+*.avi
+*.mkv
+*.m4a
+*.mp3
+*.wav
+
+# Database files
+*.db
+*.sqlite
+
+# OS
+.DS_Store
+Thumbs.db

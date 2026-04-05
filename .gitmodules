@@ -1,0 +1,3 @@
+[submodule "backend/hanna_rep"]
+	path = backend/hanna_rep
+	url = https://github.com/Jukitsye777/Zync.git

@@ -1,0 +1,20 @@
+[
+  {
+    "video_name": "classroom.mp4",
+    "frame_index": 70,
+    "image_path": null,
+    "clip_id": 1,
+    "score": 0.7503170967102051,
+    "matched_clause": "classroom scene",
+    "clause_index": 0
+  },
+  {
+    "video_name": "classroom.mp4",
+    "frame_index": 60,
+    "image_path": null,
+    "clip_id": 1,
+    "score": 0.7329629063606262,
+    "matched_clause": "classroom scene",
+    "clause_index": 0
+  }
+]
