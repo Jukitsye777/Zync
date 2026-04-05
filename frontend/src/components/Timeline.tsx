@@ -14,6 +14,7 @@ export interface TimelineClip {
   createdAt?: number;
   fadeIn?: number;
   fadeOut?: number;
+  thumbnailUrl?: string;
 }
 
 interface TimelineProps {
@@ -139,21 +140,25 @@ export function Timeline({
 
                     {/* Mini video preview */}
                     <div className="w-20 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-zinc-800 border border-zinc-700/40">
-                      <video
-                        src={clip.videoUrl}
-                        muted
-                        autoPlay
-                        className="w-full h-full object-cover"
-                        onLoadedMetadata={(e) => {
-                          e.currentTarget.currentTime = clip.trimStart;
-                          e.currentTarget.play();
-                        }}
-                        onTimeUpdate={(e) => {
-                          if (e.currentTarget.currentTime >= clip.trimEnd) {
-                            e.currentTarget.currentTime = clip.trimStart;
-                          }
-                        }}
-                      />
+                      <div className="w-20 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-zinc-800 border border-zinc-700/40">
+  <video
+    key={`${clip.id}-${clip.trimStart}-${clip.trimEnd}`}
+    src={clip.videoUrl}
+    muted
+    preload="metadata"
+    className="w-full h-full object-cover"
+    style={{ visibility: "hidden" }}
+    onLoadedMetadata={(e) => {
+      const video = e.currentTarget;
+      video.currentTime = clip.trimStart+0.1;
+    }}
+    onSeeked={(e) => {
+      const video = e.currentTarget;
+      video.pause();
+      video.style.visibility = "visible";
+    }}
+  />
+</div>
                     </div>
 
                     {/* Info */}

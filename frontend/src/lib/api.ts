@@ -1,16 +1,16 @@
-// src/hooks/api.ts
+// src/lib/api.ts
+
 export const getHealthStatus = async (): Promise<string> => {
   try {
     const response = await fetch("http://127.0.0.1:8000/health");
     if (!response.ok) throw new Error("Network error");
     const data = await response.json();
-    return data.status; // "ok"
+    return data.status;
   } catch (err) {
     console.error(err);
     return "error";
   }
 };
-// src/hooks/api.ts
 
 export interface VideoPayload {
   id: string;
@@ -25,18 +25,11 @@ export const sendVideosToBackend = async (videos: VideoPayload[]) => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ videos }),
   });
-
-  if (!res.ok) {
-    throw new Error("Failed to send videos");
-  }
-
+  if (!res.ok) throw new Error("Failed to send videos");
   return res.json();
 };
 
-export const processVideo = async (
-  prompt: string,
-  videoUrl: string
-) => {
+export const processVideo = async (prompt: string, videoUrl: string) => {
   const res = await fetch("http://127.0.0.1:8000/videos/process", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -46,17 +39,27 @@ export const processVideo = async (
   return res.json();
 };
 
+export type FilterValue =
+  | "None" | "Sunset" | "Happy" | "Sad" | "Dramatic"
+  | "Vintage" | "Night" | "Cinematic" | "Black & White"
+  | "Teal & Orange" | "Fade" | "Neon" | "Warm";
+
+export type TransitionValue =
+  | "none" | "fade" | "wipe" | "zoom" | "flash" | "glitch" | "blur" | "dip";
+
+export type MusicValue = "None" | "Lo-fi" | "Cinematic" | "Upbeat" | "Sad" | "Energetic";
+
 export interface EditSettings {
-  filter?: "Warm" | "Cinematic" | "Black & White";
-  music?: "Lo-fi" | "Cinematic" | "Upbeat";
+  filter?: FilterValue;
+  music?: MusicValue;
   musicVolume?: number;
   muteOriginal?: boolean;
-  speed?: number;
   brightness?: number;
   contrast?: number;
+  saturation?: number;
   aspectRatio?: "16:9" | "9:16" | "1:1" | "original";
   overlayText?: string;
-  transition?: string;
+  transition?: TransitionValue;
 }
 
 export interface EditPromptResponse {
@@ -78,5 +81,3 @@ export const runEditPrompt = async (
   if (!res.ok) throw new Error("Edit prompt failed");
   return res.json();
 };
-
-
